@@ -1,0 +1,327 @@
+---
+title: "Data Mining Assignment1"
+author: "Fiona Fei"
+date: "1/19/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#installed.packages("fastDummies")
+library("fastDummies")
+library(dplyr)
+```
+
+#### 1. Use csv or caret data.
+```{r}
+df <- read.csv('GermanCredit.csv', header=TRUE)
+
+#View(df)
+```
+
+
+#### 2. Build a regression model to predict variable "Amount" as a function of other variables (choose variables that you think are necessary and required to build a good model)
+
+```{r}
+#Create dummy variables for Class
+df <- dummy_cols(df,select_columns = 'Class')
+df <- subset (df, select = -c(Class))
+lm1 = lm(Amount ~ ., data = df, na.action=na.omit)
+#summary(lm1)
+```
+
+
+```{r}
+#Eliminate variables with 'NA's in the summary above
+df1 <- subset (df, select = -c(CheckingAccountStatus.none,CreditHistory.Critical,Purpose.Vacation,Purpose.Other,SavingsAccountBonds.Unknown,EmploymentDuration.Unemployed,Personal.Male.Married.Widowed,Personal.Female.Single,OtherDebtorsGuarantors.Guarantor,Property.Unknown,OtherInstallmentPlans.None,Housing.ForFree,Job.Management.SelfEmp.HighlyQualified,Class_Good ))
+#df1
+```
+
+```{r}
+#Create lm2 with updated variables
+lm2 = lm(Amount ~ .-1, data = df1)
+summary(lm2)
+```
+
+
+```{r}
+#Count the total number of rows and columns of new df1
+nrow(df1)
+ncol(df1)
+```
+
+
+```{r}
+#Create coefficient dataframe
+coef <- data.frame(matrix(ncol = 49, nrow = 1000))
+colnames(coef) <- names(lm2$coefficients) 
+#Create r^2 dataframe
+rsqr <- data.frame(matrix(ncol = 3, nrow = 1000))
+colnames(rsqr) <- c("R_Square_Train", "R_Square_Test", "Percent_Decrease")
+```
+
+#### 3. Repeat the following steps 1000 times (for loop):
+```{r}
+#df2 <- subset (df1, select = -c(Amount))
+for(i in 1:1000) {
+#split sample into train and test using 632:328 ratio 
+dt = sort(sample(nrow(df1), nrow(df1)*.632))
+train<-df1[dt,]
+test<-df1[-dt,]
+test_1 <- subset(test,select = c(Amount))
+#create linear model using train data with Amount as the dependent variable. 
+lr = lm(Amount ~ .-1, data = train)
+#save r squared in training
+rsqr[i,1] = summary(lr)$r.squared
+#save coefficients
+coef[i,] = lr$coefficients
+#save r squared in holdout predictions.
+test_r = cor(test$Amount, predict(lr, newdata = test))^2
+rsqr[i,2] = test_r
+
+}
+
+```
+
+#### 4. Pick 3 variables and plot the distribution of its coefficients.
+
+
+```{r}
+#Installment Rate Percentage
+x1 <- coef$InstallmentRatePercentage
+h<-hist(x1, breaks=10, xlab="Installment Rate Percentage",
+   main="Histogram of Installment Rate Percentage")
+
+```
+
+```{r}
+# Telephone
+x2 <- coef$Telephone
+h<-hist(x2, breaks=10, xlab="Telephone",
+   main="Histogram of Telephone")
+```
+```{r}
+#Purpose.Business
+x3 <- coef$Purpose.Business
+h<-hist(x3, breaks=10, xlab="Purpose.Business",
+   main="Histogram of Purpose.Business")
+
+```
+
+#### 5. Plot distribution of R Squared in train
+
+```{r}
+#R squared in Train
+x4 <- rsqr$R_Square_Train
+h<-hist(x4, breaks=10, xlab="R Squared in Train",
+   main="Histogram of R Squared in Train")
+
+```
+#### 6. Calculate percentage decrease of R square from train to holdout.
+
+
+
+```{r}
+#percentage decrease of R square from train to holdout.
+rsqr$Percent_Decrease <- ((rsqr$R_Square_Train - rsqr$R_Square_Test)/rsqr$R_Square_Train)*100
+head(rsqr)
+```
+
+#### Plot the distribution of percentage decrease of R square from train to holdout.
+
+```{r}
+x5 <- rsqr$Percent_Decrease
+h<-hist(x5, breaks=10, xlab="Percentage Decrease",
+   main="Histogram of % decrease of R square")
+
+```
+
+#### Interpretation: 
+
+##### Interpret the results of the above plots? 
+The above plots follows normal distribution's bell shape with a little asymmetric on the two sides.
+
+##### How would we hope/expect them to look? 
+We expect them to look like normal distributions with symmetric shapes. 
+
+##### Does this indicate a good result? 
+This indicate a good result because it shows that doing 1000 samples will help with concentrating the values. 
+
+##### What do these plots say about what we usually expect the R squared to be and how much R squared we usually expect to lose from Train to holdout?
+We usually expect the trained R Squared to be greater than the test R Squared to show the percentage decrease of R Squared. These plots are great indications showing that the percentage decrease of R Squared are greater than 0. Based on the histogram, there are around 36% percent of R Squared we expected to lose from train to holdout. 
+
+#### 7. Calculate the mean of each coefficient.
+```{r}
+#Mean of each coefficient
+#df2 <- subset (df1, select = -c(Amount))
+coef_mean = colMeans(coef)
+head(coef_mean)
+```
+
+#### 8. Calculate the standard deviation of each coefficient.
+
+```{r}
+#Standard Deviation of each coefficient
+coef_sd = sapply(df1, sd)
+head(coef_sd)
+```
+
+
+#### 9. Compare the means of the 1000 coefficients to the coefficients from the model created in step 2 created using the entire sample. Show the percentage difference
+
+
+
+```{r}
+full_coef = lm2$coefficients
+
+head(full_coef)
+```
+
+
+```{r}
+#Mean of full sample coefficients and percentage difference.
+#library(remotes)
+mean_diff <- data.frame(coef_mean, lm2$coefficients, (((coef_mean - lm2$coefficients)/coef_mean)*100))
+colnames(mean_diff) <- c('Repeat_Mean','Full_Model_Mean','Percentage_Diff')
+head(mean_diff)
+```
+
+### Confidence Intervals
+
+##### To calculate the confidence intervals, Order the values from least to greatest and look between value 25 and 975.
+
+#### 10. Using method of choice, calculate CI for each coefficient from the repeated sample model. 
+
+```{r}
+#Sort dataframe in order
+order_df <- apply(coef, 2, sort, decreasing=F)
+#Only look at row 25 to 975.
+order_df = coef[25:975,]
+#View(order_df)
+```
+
+#### Calculate the width of the CI
+
+```{r}
+#Interval Width of 1000 values
+rep_model_width = (order_df[1,] - order_df[951,])*sqrt(.632)
+rep_model_width = t(rep_model_width)
+head(rep_model_width)
+```
+
+#### 11. Calculate CI for full model using confint function.
+
+```{r}
+#Interval Width of single model.
+ci_single = confint(lm2, level = 0.95)
+full_model_width = (ci_single[,2]-ci_single[,1])
+head(full_model_width)
+```
+
+#### 12. Calculate how many of the repeated sample CI’s are tighter or broader than the full model CI’s.
+
+```{r}
+compare_width <- data.frame(rep_model_width, full_model_width)
+colnames(compare_width) <- c('rep_model_width','full_model_width')
+compare_width$Rep_vs_Full <- ifelse(compare_width$rep_model_width > compare_width$full_model_width, 'REP',
+                ifelse(compare_width$rep_model_width < compare_width$full_model_width, 'FULL', 'SAME'))
+head(compare_width)
+```
+
+```{r}
+confidence_interval <- data.frame(t(order_df[1,]),t(order_df[951,]),rep_model_width,ci_single[,1],ci_single[,2],full_model_width)
+colnames(confidence_interval) <- c('Rep_Model_Lower_Bound','Rep_Model_Higher_Bound','Rep_Model_Width','Full_Model_Lower_Bound','Full_Model_Higher_Bound','Full_Model_Width')
+head(confidence_interval)
+
+```
+
+#### 13. Interpret results. 
+
+##### How did the means compare? 
+As the percentage difference is negative, it shows that the mean of full model is lower than the mean of repeated samples. 
+
+##### How about the confidence intervals, how many were tighter or broader? 
+The confidence intervals in full model is always larger than the confidence intervals in repeated samples. 
+
+##### What does this say about each method? 
+The result indicates that using repeated samples can largely narrow down the confidence interval of the sample. 
+
+##### What if we tried doing 10,000 samples?
+Doing 10,000 samples will keep narrowing down the confidence interval of the sample. 
+
+
+### Summary of Tables and Charts
+
+
+#### 1. Histogram of 3 Coefficients (It is mentioned  ALL coefficients in the assignment but 3 will do)
+
+```{r}
+#Installment Rate Percentage
+x1 <- coef$InstallmentRatePercentage
+h<-hist(x1, breaks=10, xlab="Installment Rate Percentage",
+   main="Histogram of Installment Rate Percentage")
+
+```
+
+```{r}
+# Telephone
+x2 <- coef$Telephone
+h<-hist(x2, breaks=10, xlab="Telephone",
+   main="Histogram of Telephone")
+```
+
+```{r}
+#Purpose.Business
+x3 <- coef$Purpose.Business
+h<-hist(x3, breaks=10, xlab="Purpose.Business",
+   main="Histogram of Purpose.Business")
+
+```
+
+#### 2. Histogram of Train R squared
+
+```{r}
+#R squared in Train
+x4 <- rsqr$R_Square_Train
+h<-hist(x4, breaks=10, xlab="R Squared in Train",
+   main="Histogram of R Squared in Train")
+
+```
+
+#### 3. Histogram of Percentage drop in R squared from train to test
+
+```{r}
+x5 <- rsqr$Percent_Decrease
+h<-hist(x5, breaks=10, xlab="Percentage Decrease",
+   main="Histogram of % decrease of R square")
+
+```
+
+#### 4. Table of R square train, R square Holdout, Percentage drop
+```{r}
+head(rsqr)
+```
+
+
+#### 5. Table of Mean of repeated sample coefficients, Mean of full sample coefficients, percentage difference.
+
+```{r}
+head(mean_diff,10)
+```
+
+#### 6. Table of repeated sample lower bounds, upper bounds, scaled width and full sample lower bounds, upper bounds, and width.
+
+```{r}
+head(confidence_interval,10)
+```
+
+
+#### 7. Number of CI tighter or broader.
+
+```{r}
+head(compare_width,10)
+```
+
+
+
+
